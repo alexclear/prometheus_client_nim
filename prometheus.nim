@@ -20,7 +20,7 @@ type
     totalSum: float
     lock: Lock
 
-  Prometheus = ref object of RootObj
+  Prometheus* = ref object of RootObj
     statLock: Lock
     statList: SinglyLinkedList[StatItem]
 
