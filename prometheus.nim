@@ -8,10 +8,17 @@ type
     help: string
     value: int
 
+  Bucket = ref object of RootObj
+    margin: float
+    count: int
+
   Histogram = ref object of StatItem
     name: string
     help: string
-    bucketMargins: seq[float]
+    buckets: seq[Bucket]
+    totalCount: int
+    totalSum: float
+    lock: Lock
 
   Prometheus = ref object of RootObj
     statLock: Lock
@@ -40,13 +47,25 @@ proc increment*(obj: var Counter) =
   atomicInc(obj.value)
 
 proc newHistogram*(obj: Prometheus, name: string, help: string, bucketMargins: openArray[float]): Histogram =
-  result = Histogram(name: name, help: help, bucketMargins: @bucketMargins)
+  result = Histogram(name: name, help: help, buckets: @[])
+  for item in items(bucketMargins):
+    result.buckets.add(Bucket(margin: item, count: 0))
+  initLock(result.lock)
   obj.statLock.acquire()
   obj.statList.prepend(result)
   obj.statLock.release()
 
 proc observe*(obj: var Histogram, value: float) =
   echo "Observing...\n"
+  for item in items(obj.buckets):
+    echo "Margin: " & $(item.margin) & "\n"
+    if item.margin > value:
+      atomicInc(item.count)
+      atomicInc(obj.totalCount)
+      obj.lock.acquire()
+      obj.totalSum = obj.totalSum + value
+      obj.lock.release()
+      break
 
 method exportMetrics(item: Histogram): string =
   result = ""
