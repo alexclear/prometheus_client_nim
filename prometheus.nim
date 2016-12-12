@@ -56,21 +56,28 @@ proc newHistogram*(obj: Prometheus, name: string, help: string, bucketMargins: o
   obj.statLock.release()
 
 proc observe*(obj: var Histogram, value: float) =
-  echo "Observing...\n"
   for item in items(obj.buckets):
-    echo "Margin: " & $(item.margin) & "\n"
     if item.margin > value:
+      obj.lock.acquire()
       atomicInc(item.count)
       atomicInc(obj.totalCount)
-      obj.lock.acquire()
       obj.totalSum = obj.totalSum + value
       obj.lock.release()
       break
 
-method exportMetrics(item: Histogram): string =
+method exportMetrics(obj: Histogram): string =
   result = ""
-  result = result & "# HELP " & item.name & " " & item.help & "\n"
-  result = result & "# TYPE " & item.name & " histogram\n"
+  result = result & "# HELP " & obj.name & " " & obj.help & "\n"
+  result = result & "# TYPE " & obj.name & " histogram\n"
+  var cumulativeCount = 0
+  obj.lock.acquire()
+  for item in items(obj.buckets):
+    cumulativeCount = cumulativeCount + item.count
+    result = result & obj.name & "_bucket{le=\"" & formatFloat(item.margin, ffDecimal, 1) & "\",} " & formatFloat(toFloat(cumulativeCount), ffDecimal, 1) & "\n"
+  result = result & obj.name & "_bucket{le=\"+Inf\",} " & formatFloat(toFloat(obj.totalCount), ffDecimal, 1) & "\n"
+  result = result & obj.name & "_count " & formatFloat(toFloat(obj.totalCount), ffDecimal, 1) & "\n"
+  result = result & obj.name & "_sum " & formatFloat(obj.totalSum, ffDecimal, 1) & "\n"
+  obj.lock.release()
 
 proc exportAllMetrics*(obj: Prometheus): string =
   result = ""
