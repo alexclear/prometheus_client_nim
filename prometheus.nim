@@ -3,7 +3,7 @@ import tables, lists, locks, strutils
 type
   StatItem = ref object of RootObj
 
-  Counter = ref object of StatItem
+  Counter* = ref object of StatItem
     name: string
     help: string
     value: int
